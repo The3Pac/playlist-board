@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Playlist Board</title>
+<style>
+:root{--bg:#0b0c0f;--card:#171a21;--card2:#1f232c;--line:#2a2f3a;--text:#e8eaf0;--muted:#8b93a5;--acc:#1ed760;--danger:#ff5d6c;--iz:1}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0;overflow:hidden;background:var(--bg);color:var(--text);font:15px/1.35 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overscroll-behavior:none}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer}
+
+/* ---- поле ---- */
+#vp{position:fixed;inset:0;overflow:hidden;overflow:clip;touch-action:none;cursor:grab}
+#vp.paint{cursor:crosshair}
+#world{position:absolute;left:0;top:0;width:3200px;height:2200px;transform-origin:0 0;background-color:#0e1014;background-image:radial-gradient(#262a34 1.3px,transparent 1.3px);background-size:30px 30px;outline:1px solid #262a34}
+#draw{position:absolute;left:0;top:0;width:3200px;height:2200px;pointer-events:none;z-index:900000}
+.pov{position:absolute;inset:0;z-index:5;touch-action:none;display:none}
+#vp.paint .pov{display:block}
+
+/* ---- блоки ---- */
+.blk{position:absolute;touch-action:none}
+.blk .in{position:absolute;inset:0;display:flex;flex-direction:column;overflow:hidden;border-radius:14px;background:var(--card);border:1px solid var(--line);box-shadow:0 10px 30px #0009}
+.blk.sel .in{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc),0 10px 30px #0009}
+.blk.cover .in{border-radius:6px;background:#000;border:0}
+.blk.cover img{width:100%;height:100%;object-fit:cover;display:block;pointer-events:none;-webkit-user-drag:none;user-select:none}
+.bh{display:flex;align-items:center;gap:6px;padding:8px 8px 8px 12px;min-height:54px;cursor:grab;user-select:none;-webkit-user-select:none;touch-action:none;border-bottom:1px solid var(--line);flex:none}
+.bh .ti{flex:1;min-width:0}
+.bh .ti b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bh .ti span{display:block;color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ib{flex:none;width:34px;height:34px;border-radius:10px;border:1px solid var(--line);background:var(--card2);display:grid;place-items:center;padding:0;font-size:16px;line-height:1}
+.ib:hover{border-color:#3b4252}
+.ib.hl{border-color:var(--acc);color:var(--acc)}
+.btn{border:1px solid var(--line);background:var(--card2);border-radius:10px;padding:8px 12px;font-size:14px}
+.btn.pri{background:var(--acc);border-color:var(--acc);color:#04120a;font-weight:600}
+.btn.danger.armed{background:var(--danger);border-color:var(--danger);color:#1a0508}
+.lnk{background:none;border:0;color:var(--muted);text-decoration:underline;padding:6px 4px;font-size:13px}
+.scroll{overflow:auto;touch-action:pan-y;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+
+.rs,.rot,.cx{display:none;position:absolute;border-radius:50%;background:var(--acc);color:#04120a;place-items:center;font-weight:700;touch-action:none;border:2px solid #0b0c0f;line-height:1;user-select:none}
+.blk.sel .rs,.blk.sel .rot{display:grid}
+.blk.sel.cover .cx{display:grid}
+.blk.col .rs{display:none!important}
+.rs{width:calc(30px*var(--iz));height:calc(30px*var(--iz));right:calc(-15px*var(--iz));bottom:calc(-15px*var(--iz));font-size:calc(15px*var(--iz));cursor:nwse-resize}
+.rot{width:calc(30px*var(--iz));height:calc(30px*var(--iz));top:calc(-50px*var(--iz));left:calc(50% - 15px*var(--iz));font-size:calc(16px*var(--iz));cursor:grab}
+.rot::after{content:"";position:absolute;left:50%;top:100%;width:2px;height:calc(20px*var(--iz));background:var(--acc);transform:translateX(-50%)}
+.cx{width:calc(28px*var(--iz));height:calc(28px*var(--iz));top:calc(-14px*var(--iz));right:calc(-14px*var(--iz));background:var(--danger);font-size:calc(14px*var(--iz));cursor:pointer}
+
+/* альбом */
+.ab{display:flex;flex-direction:column;flex:1;min-height:0}
+.ar{display:flex;gap:6px;align-items:center;padding:8px 10px;flex:none;flex-wrap:wrap}
+.tl{list-style:none;margin:0;padding:0 6px 8px;flex:1;min-height:0}
+.tl label{display:flex;align-items:center;gap:8px;padding:8px 6px;border-bottom:1px solid #20242d;cursor:pointer}
+.tl input{accent-color:var(--acc);width:18px;height:18px;flex:none;margin:0}
+.tl .n{color:var(--muted);width:22px;text-align:right;font-size:12px;flex:none}
+.tl .tt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tl .tt.off{opacity:.4;text-decoration:line-through}
+.tl .d{color:var(--muted);font-size:12px;flex:none}
+
+/* плейлист */
+.pl{list-style:none;margin:0;padding:6px;counter-reset:n;flex:1;min-height:0}
+.pl li{display:flex;align-items:center;gap:8px;padding:6px;border-radius:10px;background:var(--card2);margin-bottom:6px;counter-increment:n}
+.pl li::before{content:counter(n);color:var(--muted);font-size:12px;width:20px;text-align:right;flex:none}
+.pl li.drag{opacity:.75;outline:1px dashed var(--acc)}
+.pl li.empty{display:block;background:none;color:var(--muted);font-size:14px;padding:10px;counter-increment:none}
+.pl li.empty::before{content:none}
+.grip{touch-action:none;cursor:grab;color:var(--muted);padding:8px 4px;font-size:16px;flex:none;user-select:none;line-height:1}
+.pl img,.ph{width:36px;height:36px;border-radius:6px;object-fit:cover;flex:none;background:#262b36;display:grid;place-items:center;color:var(--muted)}
+.pl .rt{flex:1;min-width:0}
+.pl .rt b,.pl .rt span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pl .rt span{color:var(--muted);font-size:12px}
+.pf{display:flex;gap:6px;padding:8px;border-top:1px solid var(--line);flex:none;flex-wrap:wrap}
+.nm{background:transparent;border:0;outline:0;font-weight:600;font-size:16px;min-width:0;flex:1;width:100%;padding:4px 0;user-select:text;-webkit-user-select:text}
+
+/* поиск */
+.top{position:fixed;z-index:50;top:max(10px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);width:min(580px,calc(100vw - 20px))}
+.bar{display:flex;align-items:center;gap:8px;background:#16181ef2;backdrop-filter:blur(8px);border:1px solid var(--line);border-radius:999px;padding:0 6px 0 16px;height:48px}
+.bar svg{width:18px;height:18px;stroke:var(--muted);fill:none;stroke-width:2;stroke-linecap:round;flex:none}
+.bar input{flex:1;min-width:0;background:transparent;border:0;outline:0;font-size:16px;height:100%}
+.bar button{width:34px;height:34px;border-radius:50%;border:0;background:transparent;color:var(--muted);font-size:18px;flex:none}
+.dd{margin-top:8px;background:#14161cf7;backdrop-filter:blur(10px);border:1px solid var(--line);border-radius:16px;max-height:min(62vh,560px);overflow:auto;touch-action:pan-y;overscroll-behavior:contain;padding:6px}
+.dd[hidden]{display:none}
+.sec{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:8px 8px 4px}
+.r{display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:10px;cursor:pointer}
+.r:hover,.r:active{background:var(--card2)}
+.r img,.r .ph{width:48px;height:48px;border-radius:6px;object-fit:cover;flex:none;background:#262b36}
+.r .t{flex:1;min-width:0}
+.r .t b,.r .t span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.r .t span{color:var(--muted);font-size:13px}
+.r .go{flex:none;width:34px;height:34px;border-radius:50%;background:var(--acc);color:#04120a;display:grid;place-items:center;font-weight:700;font-size:18px}
+.msg{padding:10px 8px;color:var(--muted);font-size:14px}
+.msg.err{color:#ff8a95}
+.msg small{display:block;opacity:.75;margin-top:6px;word-break:break-word;color:var(--muted)}
+
+/* панель */
+.tb{position:fixed;z-index:50;bottom:max(12px,env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);max-width:calc(100vw - 16px);display:flex;gap:6px;align-items:center;padding:8px;background:#16181ef2;backdrop-filter:blur(8px);border:1px solid var(--line);border-radius:999px;overflow-x:auto;scrollbar-width:none}
+.tb::-webkit-scrollbar{display:none}
+.tbn{flex:none;width:40px;height:40px;border-radius:50%;border:1px solid transparent;background:transparent;display:grid;place-items:center;color:var(--text);padding:0;font-size:22px;line-height:1}
+.tbn.on{background:#2a2f3a;border-color:#3b4252}
+.tbn.armed{background:var(--danger);color:#1a0508}
+.tb svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.sep{width:1px;height:24px;background:var(--line);flex:none;margin:0 2px}
+.dot{flex:none;width:26px;height:26px;border-radius:50%;border:2px solid transparent;padding:0;box-shadow:inset 0 0 0 1px #ffffff30}
+.dot.on{border-color:#fff;transform:scale(1.15)}
+.sz i{display:block;border-radius:50%;background:currentColor}
+.toast{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--acc);color:#04120a;padding:9px 16px;border-radius:999px;font-weight:600;opacity:0;pointer-events:none;transition:opacity .2s;z-index:60;white-space:nowrap;max-width:92vw;overflow:hidden;text-overflow:ellipsis}
+.toast.show{opacity:1}
+@media(max-width:560px){
+  .tb{flex-wrap:wrap;justify-content:center;border-radius:26px;width:calc(100vw - 16px);overflow:visible;gap:4px 6px;padding:8px 6px}
+  .tbn{width:36px;height:36px}
+  .sep{display:none}
+  .toast{bottom:calc(134px + env(safe-area-inset-bottom))}
+}
+</style>
+</head>
+<body>
+<div id="vp">
+  <div id="world"><canvas id="draw" width="3200" height="2200"></canvas></div>
+  <div class="pov" id="pov"></div>
+</div>
+
+<div class="top">
+  <div class="bar">
+    <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+    <input id="q" type="text" placeholder="Поиск: альбом, песня, артист…" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search">
+    <button id="qx" title="Очистить">✕</button>
+  </div>
+  <div class="dd" id="dd" hidden></div>
+</div>
+
+<div class="tb" id="tb"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+(()=>{
+'use strict';
+const $=(s,r=document)=>r.querySelector(s);
+const uid=()=>Math.random().toString(36).slice(2,9);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
+const norm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^\p{L}\p{N}]+/gu,' ').trim();
+const fmtDur=s=>s?Math.floor(s/60)+':'+String(s%60).padStart(2,'0'):'';
+
+const vp=$('#vp'), world=$('#world'), cv=$('#draw'), ctx=cv.getContext('2d');
+const q=$('#q'), dd=$('#dd'), tb=$('#tb');
+const WW=3200, WH=2200, COLH=54, KEY='plboard-v2';
+const COLORS=['#ffffff','#111111','#ff3b3b','#ffb02e','#1ed760','#2f8bff','#a24bff'];
+const SIZES=[4,8,16,28];
+const FM=[['at','Artist - Title'],['ta','Title - Artist'],['t','Только название']];
+
+const S={blocks:[],pl:{name:'Мой плейлист',fmt:'at',tracks:[]},strokes:[],view:{x:0,y:0,z:1},tool:'hand',color:'#ffffff',size:8,zc:10,sel:null,backup:null};
+const els=new Map();
+const pointers=new Map();
+let drag=null, cur=null;
+
+/* ================= сохранение ================= */
+let st;
+function saveSoon(){clearTimeout(st);st=setTimeout(save,300);}
+function save(){
+  const base={blocks:S.blocks,pl:S.pl,view:S.view,color:S.color,size:S.size};
+  try{localStorage.setItem(KEY,JSON.stringify(Object.assign({strokes:S.strokes},base)));}
+  catch(e){try{localStorage.setItem(KEY,JSON.stringify(Object.assign({strokes:[]},base)));}catch(_){}}
+}
+function validBlock(b){return b&&typeof b==='object'&&b.id&&['pl','album','cover'].includes(b.type)&&[b.x,b.y,b.w,b.h].every(Number.isFinite);}
+let hadView=false;
+function load(){
+  try{
+    const d=JSON.parse(localStorage.getItem(KEY)||'null');
+    if(d&&Array.isArray(d.blocks)){
+      S.blocks=d.blocks.filter(validBlock);
+      if(d.pl&&Array.isArray(d.pl.tracks)) S.pl=Object.assign(S.pl,d.pl);
+      if(Array.isArray(d.strokes)) S.strokes=d.strokes;
+      if(d.view&&[d.view.x,d.view.y,d.view.z].every(Number.isFinite)){S.view=d.view;hadView=true;}
+      if(typeof d.color==='string') S.color=d.color;
+      if(SIZES.includes(d.size)) S.size=d.size;
+    }
+  }catch(e){}
+  S.zc=Math.max(10,...S.blocks.map(b=>b.z||0))+1;
+}
+
+/* ================= вид (панорама / зум) ================= */
+function applyView(){const v=S.view;world.style.transform=`translate(${v.x}px,${v.y}px) scale(${v.z})`;world.style.setProperty('--iz',(1/v.z).toFixed(3));}
+function clampView(){const v=S.view,W=vp.clientWidth,H=vp.clientHeight;const mx=140,my=140;v.x=clamp(v.x,Math.min(mx,W-WW*v.z-140),mx);v.y=clamp(v.y,Math.min(my,H-WH*v.z-140),my);}
+function zoomAt(cx,cy,nz){const v=S.view;nz=clamp(nz,.25,2.5);const k=nz/v.z;v.x=cx-(cx-v.x)*k;v.y=cy-(cy-v.y)*k;v.z=nz;clampView();applyView();saveSoon();}
+function fitView(){
+  if(!S.blocks.length){S.view={x:0,y:0,z:clamp(innerWidth/640,.7,1)};applyView();return;}
+  let x1=1e9,y1=1e9,x2=-1e9,y2=-1e9;
+  for(const b of S.blocks){
+    const a=(b.rot||0)*Math.PI/180,c=Math.abs(Math.cos(a)),s=Math.abs(Math.sin(a));
+    const ex=(b.w*c+b.h*s)/2,ey=(b.w*s+b.h*c)/2,cx=b.x+b.w/2,cy=b.y+b.h/2;
+    x1=Math.min(x1,cx-ex);y1=Math.min(y1,cy-ey);x2=Math.max(x2,cx+ex);y2=Math.max(y2,cy+ey);
+  }
+  const W=vp.clientWidth,H=vp.clientHeight,pw=x2-x1+120,ph=y2-y1+220;
+  const z=clamp(Math.min(W/pw,H/ph),.25,1.2);
+  S.view={z,x:W/2-(x1+x2)/2*z,y:H/2-(y1+y2)/2*z+10};
+  clampView();applyView();saveSoon();
+}
+const toWorld=e=>({x:(e.clientX-S.view.x)/S.view.z,y:(e.clientY-S.view.y)/S.view.z});
+
+/* ================= блоки ================= */
+const getBlock=id=>S.blocks.find(b=>b.id===id);
+const plBlock=()=>S.blocks.find(b=>b.type==='pl');
+
+function albumHTML(b){
+  const n=b.tracks.filter(t=>t.on).length;
+  return `<div class="in"><div class="bh"><div class="ti"><b>${esc(b.title)}</b><span>${esc(b.artist)} · ${b.tracks.length} тр.</span></div>
+<button class="ib" data-a="col" title="Свернуть / развернуть">${b.col?'▸':'▾'}</button><button class="ib" data-a="close" title="Убрать">✕</button></div>
+<div class="ab"><div class="ar"><button class="btn pri" data-a="add">＋ В плейлист (<span class="cnt">${n}</span>)</button><button class="lnk" data-a="all">все</button><button class="lnk" data-a="none">никакие</button></div>
+<ul class="tl scroll">${b.tracks.map((t,i)=>`<li><label><input type="checkbox" data-i="${i}" ${t.on?'checked':''}><span class="n">${i+1}</span><span class="tt${t.on?'':' off'}">${esc(t.t)}</span><span class="d">${fmtDur(t.d)}</span></label></li>`).join('')}</ul></div></div><div class="rs">↘</div>`;
+}
+function plHTML(){
+  return `<div class="in"><div class="bh"><input class="nm" value="${esc(S.pl.name)}" maxlength="60" aria-label="Название плейлиста"><button class="ib hl" data-a="back" title="Вернуть прежний порядок" style="display:none">↩</button><button class="ib" data-a="shuf" title="Перемешать">🔀</button></div>
+<ul class="pl scroll"></ul>
+<div class="pf"><button class="btn" data-a="fmt"></button><button class="btn pri" data-a="copy">Копировать</button><button class="btn" data-a="dl">.txt</button><button class="btn danger" data-a="clr">Очистить</button></div></div><div class="rs">↘</div>`;
+}
+function coverHTML(b){
+  return `<div class="in"><img src="${esc(b.art)}" alt="" draggable="false" referrerpolicy="no-referrer"></div><div class="rot">↻</div><div class="rs">↘</div><div class="cx" data-a="close">✕</div>`;
+}
+const inner=b=>b.type==='album'?albumHTML(b):b.type==='pl'?plHTML():coverHTML(b);
+
+function place(b){
+  const el=els.get(b.id);if(!el)return;
+  el.style.left=b.x+'px';el.style.top=b.y+'px';el.style.width=b.w+'px';
+  el.style.height=((b.type==='album'&&b.col)?COLH:b.h)+'px';
+  el.style.zIndex=b.z||1;
+  el.style.transform=b.rot?`rotate(${b.rot}deg)`:'';
+  el.classList.toggle('col',!!b.col);
+}
+function mount(b){
+  const el=document.createElement('div');
+  el.className='blk '+b.type;el.dataset.id=b.id;el.innerHTML=inner(b);
+  world.appendChild(el);els.set(b.id,el);place(b);
+  if(b.type==='pl')renderPl();
+  return el;
+}
+function refresh(b){
+  const el=els.get(b.id);if(!el)return;
+  const sc=$('.scroll',el),top=sc?sc.scrollTop:0;
+  el.innerHTML=inner(b);
+  const sc2=$('.scroll',el);if(sc2)sc2.scrollTop=top;
+  place(b);
+}
+function select(id){S.sel=id;for(const [bid,el] of els)el.classList.toggle('sel',bid===id);}
+function bring(b){b.z=++S.zc;place(b);}
+function removeBlock(b){S.blocks=S.blocks.filter(x=>x!==b);const el=els.get(b.id);if(el)el.remove();els.delete(b.id);if(S.sel===b.id)S.sel=null;saveSoon();}
+
+/* ближайшее к центру экрана свободное место под группу блоков */
+function findSpot(w,h){
+  const v=S.view,z=v.z,gap=24;
+  const cx=(vp.clientWidth/2-v.x)/z-w/2,cy=(vp.clientHeight/2-v.y)/z-h/2;
+  const hit=(x,y)=>S.blocks.some(b=>x<b.x+b.w+gap&&x+w>b.x-gap&&y<b.y+b.h+gap&&y+h>b.y-gap);
+  let best=null,bd=Infinity;
+  for(let y=20;y<=WH-h-20;y+=40)for(let x=20;x<=WW-w-20;x+=40){
+    if(hit(x,y))continue;
+    const d=(x-cx)*(x-cx)+(y-cy)*(y-cy);if(d<bd){bd=d;best={x,y};}
+  }
+  return best||{x:clamp(cx,20,WW-w-20),y:clamp(cy,20,WH-h-20)};
+}
+/* сдвигает вид так, чтобы прямоугольник был виден (масштаб не меняется) */
+function reveal(x,y,w,h){
+  const v=S.view,z=v.z,W=vp.clientWidth,H=vp.clientHeight;
+  const L=x*z+v.x,T=y*z+v.y,R=(x+w)*z+v.x,B=(y+h)*z+v.y,m=16,top=72,bot=84;
+  if(L<m||R>W-m)v.x=(R-L>W-2*m)?m-x*z:v.x+(L<m?m-L:(W-m)-R);
+  if(T<top||B>H-bot)v.y=(B-T>H-top-bot)?top-y*z:v.y+(T<top?top-T:(H-bot)-B);
+  clampView();applyView();
+}
+function addAlbum(a,tracks){
+  const w=330,h=440,gw=w+20+260,sp=findSpot(gw,h);
+  const alb={id:uid(),type:'album',x:sp.x,y:sp.y,w,h,z:++S.zc,title:a.title,artist:a.artist,art:a.art,thumb:a.thumb,tracks,col:false};
+  const cov={id:uid(),type:'cover',x:sp.x+w+20,y:sp.y,w:260,h:260,rot:0,z:++S.zc,art:a.art,title:a.title};
+  S.blocks.push(alb,cov);mount(alb);mount(cov);select(alb.id);
+  reveal(sp.x,sp.y,w,h);saveSoon();
+}
+
+/* ================= плейлист ================= */
+function renderPl(){
+  const b=plBlock();if(!b)return;const el=els.get(b.id);if(!el)return;
+  const ul=$('.pl',el),tr=S.pl.tracks;
+  ul.innerHTML=tr.length?tr.map(t=>`<li data-id="${t.id}"><span class="grip" title="Перетащить">⋮⋮</span>${t.art?`<img src="${esc(t.art)}" alt="" loading="lazy" referrerpolicy="no-referrer">`:'<div class="ph">♪</div>'}<div class="rt"><b>${esc(t.title)}</b><span>${esc(t.artist)}</span></div><button class="ib" data-a="rm" title="Убрать">✕</button></li>`).join(''):'<li class="empty">Пока пусто. Найди песню в поиске сверху или добавь галочками из альбома.</li>';
+  const f=FM.find(x=>x[0]===S.pl.fmt)||FM[0];
+  $('[data-a=fmt]',el).textContent=f[1];
+  $('[data-a=copy]',el).textContent='Копировать'+(tr.length?` (${tr.length})`:'');
+  $('[data-a=back]',el).style.display=S.backup?'':'none';
+}
+function addTracks(list){
+  const have=new Set(S.pl.tracks.map(t=>norm(t.artist+' '+t.title)));let n=0;
+  for(const t of list){
+    const key=norm((t.artist||'')+' '+t.title);if(!t.title||have.has(key))continue;
+    have.add(key);S.pl.tracks.push({id:uid(),artist:t.artist||'',title:t.title,art:t.art||''});n++;
+  }
+  S.backup=null;renderPl();saveSoon();
+  const b=plBlock(),el=b&&els.get(b.id);if(el&&n){const ul=$('.pl',el);ul.scrollTop=ul.scrollHeight;}
+  return n;
+}
+function exportText(){
+  const f=S.pl.fmt;
+  return S.pl.tracks.map(t=>f==='t'||!t.artist?t.title:f==='ta'?`${t.title} - ${t.artist}`:`${t.artist} - ${t.title}`).join('\n');
+}
+function shuffle(){
+  const tr=S.pl.tracks;if(tr.length<2)return toast('Мало треков для перемешивания');
+  S.backup=tr.map(t=>t.id);
+  for(let i=tr.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[tr[i],tr[j]]=[tr[j],tr[i]];}
+  renderPl();saveSoon();toast('Перемешано');
+}
+function unshuffle(){
+  if(!S.backup)return;
+  const map=new Map(S.pl.tracks.map(t=>[t.id,t])),seen=new Set();
+  const out=[];for(const id of S.backup){const t=map.get(id);if(t){out.push(t);seen.add(id);}}
+  for(const t of S.pl.tracks)if(!seen.has(t.id))out.push(t);
+  S.pl.tracks=out;S.backup=null;renderPl();saveSo
